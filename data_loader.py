@@ -84,6 +84,11 @@ def inject_manual_markets(exchange):
             'baseId': base,
             'quoteId': quote,
             'active': True,
+            'type': 'spot',
+            'spot': True,
+            'future': False,
+            'option': False, 
+            'contract': False,
             'precision': {'amount': 8, 'price': 8},
             'limits': {'amount': {'min': 0.00001, 'max': 9000}, 'cost': {'min': 5, 'max': 1000000}},
             'info': {}
@@ -92,14 +97,17 @@ def inject_manual_markets(exchange):
         
     exchange.markets = markets
     exchange.markets_by_id = ids
-    exchange.options['adjustForTimeDifference'] = False # Time sync da yapma
+    exchange.options['adjustForTimeDifference'] = False 
     return exchange
 
 def get_exchange(use_spot=False, ignore_sticky=False):
     import random
     
-    # Global Zorlama veya Parametre
-    use_spot = use_spot or FORCE_SPOT_MODE
+    # Manual Market aktifse ZORUNLU olarak Spot Moduna geç (Tanımlar Spot çünkü)
+    if FORCE_MANUAL_MARKETS:
+        use_spot = True
+    else:
+        use_spot = use_spot or FORCE_SPOT_MODE
     
     # options: defaultType: future vs spot
     default_type = 'spot' if use_spot else 'future'
