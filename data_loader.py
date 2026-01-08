@@ -27,6 +27,9 @@ PROXIES = [
     'http://51.159.115.233:3128',
 ]
 
+# Global değişken: Çalışan proxy'yi hafızada tutmak için
+PREFERRED_PROXY = None
+
 def get_exchange(use_spot=False):
     import random
     
@@ -36,13 +39,15 @@ def get_exchange(use_spot=False):
     config = {
         'enableRateLimit': True,
         'options': {'defaultType': default_type},
-        'timeout': 15000, # Timeout uzatıldı
-        # SSL hatası almamak için (Güvenli değil ama demo için gerekli)
+        'timeout': 20000, # Timeout tavan yaptı
         'verify': False 
     }
     
-    # Rastgele bir proxy seç
-    proxy = random.choice(PROXIES)
+    # Eğer daha önce çalışan bir proxy bulduysak onu kullan
+    if PREFERRED_PROXY is not None:
+        proxy = PREFERRED_PROXY
+    else:
+        proxy = random.choice(PROXIES)
     
     if proxy:
         config['proxies'] = {
@@ -52,29 +57,37 @@ def get_exchange(use_spot=False):
     
     return ccxt.binance(config)
 
-def fetch_binance_ohlcv(symbol: str = 'BTC/USDT', timeframe: str = '1h', limit: int = 500) -> Optional[pd.DataFrame]:
-    # Eğer ilk deneme başarısız olursa, farklı bir proxy ile tekrar dene (Basit Retry Mekanizması)
+def fetch_binance_ohlcv(symbol: str = 'BTC/USDT', timeframe: str = '1h', limit: int = 500) -> tuple[Optional[pd.DataFrame], str]:
+    # Dönüş formatı değişti: (DataFrame, HataMesajı)
+    
     max_retries = 4
+    last_error = ""
+    
     for i in range(max_retries):
         try:
-            # Son denemede Spot API dene (Futures engelliyse)
-            use_spot = True if i == max_retries - 1 else False
+            # 2. denemeden itibaren Spot API'yi de dene (Futures çok nazlı)
+            use_spot = True if i >= 1 else False
             
             exchange = get_exchange(use_spot=use_spot)
             
-            if use_spot:
-                print(f"⚠️ Futures erişilemedi, Spot deneniyor: {symbol}")
+            # Bot korumasını aşmak için User-Agent
+            exchange.userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
             
             ohlcv = exchange.fetch_ohlcv(symbol, timeframe, limit=limit)
-            if not ohlcv: return None
-            
+            if not ohlcv: 
+                last_error = "Boş Veri Döndü"
+                continue
+
             df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
             df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
-            return df
+            return df, ""
+            
         except Exception as e:
+            last_error = str(e)
+            # Eğer tercih edilen proxy hata verdiyse, belki de ölmüştür? (Şimdilik sıfırlamıyoruz)
             continue
             
-    return None
+    return None, last_error
 
 def fetch_open_interest(symbol: str) -> Optional[float]:
     try:

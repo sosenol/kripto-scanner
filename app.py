@@ -137,40 +137,42 @@ if st.button("🔍 TARAMAYI BAŞLAT", use_container_width=True):
     mode = mode_map[scan_mode]
     errors = []
     
-    # Bağlantı testi (Retry Mekanizması ile)
-    from data_loader import get_exchange
+    import data_loader # Modülü import et
+    from data_loader import get_exchange, PROXIES
     connection_success = False
     last_error = ""
     
-    with st.spinner("🌍 Binance sunucularına bağlanılıyor (Proxy deneniyor)..."):
-        mask_cols = st.columns([1, 10]) # İkon ve yazı hizası için
-        for attempt in range(1, 6): # 5 kere dene
+    with st.spinner("🌍 Binance sunucularına bağlanılıyor (Akıllı Proxy Seçimi)..."):
+        mask_cols = st.columns([1, 10]) 
+        # Manuel proxy rotasyonu yapıp çalışanı bulacağız
+        for proxy in PROXIES:
             try:
+                # Geçici olarak manuell proxy ile dene
+                data_loader.PREFERRED_PROXY = proxy if proxy else None
                 ex = get_exchange()
-                ex.fetch_time() # Ping testi
+                ex.fetch_time() # Ping
                 connection_success = True
-                status.success(f"🟢 Binance Bağlantısı Başarılı (Deneme: {attempt})")
-                break
+                status.success(f"🟢 Bağlantı Başarılı ({'Direkt' if not proxy else 'Proxy'})")
+                break # Döngüden çık, PREFERRED_PROXY artık set edildi
             except Exception as e:
                 last_error = str(e)
-                # Hata olsa bile devam et, sonraki proxy'i dene
                 continue
     
     if not connection_success:
-        errors.append(f"❌ Binance API Bağlantı Hatası: Hiçbir proxy çalışmadı. Son Hata: {last_error}")
-        status.error("🔴 API Bağlantı Sorunu - Sayfayı Yenileyin")
-        with st.expander("Hata Detayları"):
-            st.write(last_error)
+        errors.append(f"❌ Kritik Hata: Hiçbir bağlantı yöntemi çalışmadı. Son Hata: {last_error}")
+        status.error("🔴 Bağlantı Kurulamadı")
+        # Eğer hepsi patladıysa Spot Fallback için None 'a çek (Belki rastgele dener)
+        data_loader.PREFERRED_PROXY = None
 
     try:
         if connection_success:
             coins = fetch_coins_by_mode(mode, limit=30, verbose=False)
             if not coins:
-                errors.append("⚠️ Mevcut modda (veya seçilen hacimde) taranacak coin bulunamadı.")
+                errors.append("⚠️ Coin listesi alınamadı.")
         else:
             coins = []
     except Exception as e:
-        errors.append(f"❌ Tarama Hatası: {str(e)}")
+        errors.append(f"❌ Liste Hatası: {str(e)}")
         coins = []
     
     import concurrent.futures
@@ -181,13 +183,15 @@ if st.button("🔍 TARAMAYI BAŞLAT", use_container_width=True):
         symbol = item['symbol']
         clean_sym = clean_symbol(symbol)
         try:
-            # Her thread kendi proxy bağlantısını kullanır
-            df_1h = fetch_binance_ohlcv(symbol, timeframe='1h', limit=500)
-            if df_1h is None: return {'symbol': clean_sym, 'status': 'rejected', 'reason': 'Veri Yok'}
+            # fetch_binance_ohlcv artık (df, error) dönüyor
+            df_1h, err_1h = fetch_binance_ohlcv(symbol, timeframe='1h', limit=500)
+            if df_1h is None: 
+                return {'symbol': clean_sym, 'status': 'rejected', 'reason': f'Veri Yok ({err_1h[:30]}...)'}
             
-            df_4h = fetch_binance_ohlcv(symbol, timeframe='4h', limit=100)
-            df_15m = fetch_binance_ohlcv(symbol, timeframe='15m', limit=100)
-            df_1d = fetch_binance_ohlcv(symbol, timeframe='1d', limit=30)
+            # Diğerleri için hata yönetimi basitleştirildi, ana veri varsa devam et
+            df_4h, _ = fetch_binance_ohlcv(symbol, timeframe='4h', limit=100)
+            df_15m, _ = fetch_binance_ohlcv(symbol, timeframe='15m', limit=100)
+            df_1d, _ = fetch_binance_ohlcv(symbol, timeframe='1d', limit=30)
             
             ai_data = AIAnaliz.hesapla_olasilik(df_1h, df_1d, symbol, df_4h, df_15m)
             
