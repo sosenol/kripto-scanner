@@ -178,9 +178,19 @@ def fetch_coins_by_mode(mode: str = "major", limit: int = 20, verbose: bool = Tr
     """
     3 Farklı Tarama Modu:
     - "major": Whitelist'teki majör coinler
-    - "volatility": Tüm piyasa, sadece volatiliteye göre
-    - "risk": Shitcoinler (Whitelist dışı, hacimli)
     """
+    # Eğer Manual Market Modu aktifse, API'den liste çekmeye çalışma (Hata verir)
+    if FORCE_MANUAL_MARKETS:
+        # data_loader içinde tanımlı hardcoded liste
+        symbols = [
+            'BTC/USDT', 'ETH/USDT', 'SOL/USDT', 'BNB/USDT', 'XRP/USDT', 'ADA/USDT', 
+            'DOGE/USDT', 'AVAX/USDT', 'TRX/USDT', 'DOT/USDT', 'MATIC/USDT', 'LINK/USDT', 
+            'UNI/USDT', 'LTC/USDT', 'BCH/USDT', 'ATOM/USDT', 'XLM/USDT', 'ETC/USDT', 
+            'FIL/USDT', 'XMR/USDT', 'NEAR/USDT', 'APT/USDT', 'QNT/USDT', 'LDO/USDT', 
+            'HBAR/USDT', 'ICP/USDT', 'GRT/USDT', 'SAND/USDT', 'EOS/USDT', 'MANA/USDT'
+        ]
+        return [{'symbol': s} for s in symbols][:limit]
+
     try:
         exchange = get_exchange()
         tickers = exchange.fetch_tickers()
