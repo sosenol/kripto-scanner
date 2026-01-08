@@ -62,9 +62,11 @@ col1, col2, col3 = st.columns([2, 1, 1])
 with col1:
     scan_mode = st.selectbox("🎯 Tarama Modu", ["🛡️ Majör Coinler", "🔥 Yüksek Volatilite", "⚠️ Risk Avcısı"], index=0)
 with col2:
-    min_profit = st.slider("💰 Min. Kar (%)", 0.5, 10.0, 1.0, 0.5)
+    # Varsayılan kar hedefi düşürüldü (%0.5)
+    min_profit = st.slider("💰 Min. Kar (%)", 0.1, 10.0, 0.5, 0.1)
 with col3:
-    min_ai = st.slider("🧠 Min. AI (%)", 50, 80, 52, 2)
+    # Varsayılan AI güveni düşürüldü (%50)
+    min_ai = st.slider("🧠 Min. AI (%)", 40, 90, 50, 2)
 
 mode_map = {"🛡️ Majör Coinler": "major", "🔥 Yüksek Volatilite": "volatility", "⚠️ Risk Avcısı": "risk"}
 
@@ -181,7 +183,7 @@ if st.button("🔍 TARAMAYI BAŞLAT", use_container_width=True):
         try:
             # Her thread kendi proxy bağlantısını kullanır
             df_1h = fetch_binance_ohlcv(symbol, timeframe='1h', limit=500)
-            if df_1h is None: return None
+            if df_1h is None: return {'symbol': clean_sym, 'status': 'rejected', 'reason': 'Veri Yok'}
             
             df_4h = fetch_binance_ohlcv(symbol, timeframe='4h', limit=100)
             df_15m = fetch_binance_ohlcv(symbol, timeframe='15m', limit=100)
@@ -189,15 +191,11 @@ if st.button("🔍 TARAMAYI BAŞLAT", use_container_width=True):
             
             ai_data = AIAnaliz.hesapla_olasilik(df_1h, df_1d, symbol, df_4h, df_15m)
             
-            # Sadece filtrelere uyanları döndür (Performans için)
             potansiyel = ai_data['Setup'].get('Potansiyel', 0)
             ai_skor = ai_data['AI_Skor']
             
-            # Ön Eleme
-            if potansiyel < min_profit or ai_skor < min_ai:
-                return None
-
-            return {
+            # Sonuç objesi
+            result = {
                 "Sembol": clean_sym,
                 "Yön": ai_data['Tahmin'],
                 "Fiyat": ai_data['Setup'].get('Giriş', 0),
@@ -216,10 +214,20 @@ if st.button("🔍 TARAMAYI BAŞLAT", use_container_width=True):
                 "MTF_Uyum": ai_data.get('MTF_Uyum', False),
                 "MTF_Detay": ai_data.get('MTF_Detay', '-')
             }
-        except:
-            return None
+            
+            # Ön Eleme Kontrolü
+            if potansiyel < min_profit:
+                return {'symbol': clean_sym, 'status': 'rejected', 'reason': f'Düşük Kar: %{potansiyel:.2f}'}
+            if ai_skor < min_ai:
+                return {'symbol': clean_sym, 'status': 'rejected', 'reason': f'Düşük Güven: %{ai_skor}'}
+
+            result['status'] = 'accepted'
+            return result
+        except Exception as e:
+            return {'symbol': clean_sym, 'status': 'error', 'reason': str(e)}
 
     results = []
+    rejected = []
     
     # Progress Bar ve Durum Metni
     progress_bar = st.progress(0)
@@ -237,18 +245,20 @@ if st.button("🔍 TARAMAYI BAŞLAT", use_container_width=True):
             try:
                 data = future.result()
                 if data:
-                    results.append(data)
+                    if data['status'] == 'accepted':
+                        results.append(data)
+                    elif data['status'] == 'rejected':
+                        rejected.append(data)
             except Exception as exc:
                 pass
             
             completed += 1
             progress_bar.progress(completed / total)
-            status_text.markdown(f"⏳ Taranıyor: **{coin['symbol']}** ({completed}/{total})")
+            status_text.markdown(f"⏳ Taranıyor: **{coin['symbol']}** ({completed}/{total}) - Bulunan: {len(results)}")
             
     status_text.empty()
     progress_bar.empty()
     
-    # Filtreleme (Zaten fonksiyon içinde yapıldı ama tekrar kontrol)
     elite = [r for r in results]
     
     # MTF uyumlu olanları öne, sonra potansiyele göre sırala
@@ -267,7 +277,15 @@ if st.button("🔍 TARAMAYI BAŞLAT", use_container_width=True):
             for j, data in enumerate(batch):
                 with cols[j]:
                     st.markdown(render_card(data), unsafe_allow_html=True)
-    elif not errors: # Hata yok ama fırsat da yok
+    
+    # Fırsat bulunsa da bulunmasa da Reddedilenleri göster (Kullanıcı güveni için)
+    if rejected:
+        with st.expander(f"🚫 Filtreye Takılanlar ({len(rejected)} Coin)"):
+            st.write("Aşağıdaki coinler tarandı ancak kar veya güven kriterlerinize uymadı:")
+            rej_df = pd.DataFrame(rejected)[['symbol', 'reason']]
+            st.dataframe(rej_df, hide_index=True)
+            
+    if not elite and not errors:
         st.markdown(f"""
         <div class="waiting-msg">
             📡 {scan_mode} modunda şu an uygun fırsat yok<br>
