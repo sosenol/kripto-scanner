@@ -54,6 +54,46 @@ random.shuffle(PROXIES) # Her yüklemede listeyi karıştır
 # Global değişkenler
 PREFERRED_PROXY = None
 FORCE_SPOT_MODE = False
+FORCE_MANUAL_MARKETS = True # exchangeInfo datasını çekmeyip elle tanımlayacağız
+
+def inject_manual_markets(exchange):
+    """
+    Binance'in exchangeInfo endpoint'i engellendiği için
+    en popüler coinleri elle tanımlıyoruz. Bu sayede load_markets() çağrısından kurtuluyoruz.
+    """
+    markets = {}
+    ids = {}
+    
+    # En popüler 30 Coin
+    symbols = [
+        'BTC/USDT', 'ETH/USDT', 'SOL/USDT', 'BNB/USDT', 'XRP/USDT', 'ADA/USDT', 
+        'DOGE/USDT', 'AVAX/USDT', 'TRX/USDT', 'DOT/USDT', 'MATIC/USDT', 'LINK/USDT', 
+        'UNI/USDT', 'LTC/USDT', 'BCH/USDT', 'ATOM/USDT', 'XLM/USDT', 'ETC/USDT', 
+        'FIL/USDT', 'XMR/USDT', 'NEAR/USDT', 'APT/USDT', 'QNT/USDT', 'LDO/USDT', 
+        'HBAR/USDT', 'ICP/USDT', 'GRT/USDT', 'SAND/USDT', 'EOS/USDT', 'MANA/USDT'
+    ]
+    
+    for symbol in symbols:
+        base, quote = symbol.split('/')
+        market_id = base + quote # BTCUSDT
+        markets[symbol] = {
+            'id': market_id,
+            'symbol': symbol,
+            'base': base,
+            'quote': quote,
+            'baseId': base,
+            'quoteId': quote,
+            'active': True,
+            'precision': {'amount': 8, 'price': 8},
+            'limits': {'amount': {'min': 0.00001, 'max': 9000}, 'cost': {'min': 5, 'max': 1000000}},
+            'info': {}
+        }
+        ids[market_id] = markets[symbol]
+        
+    exchange.markets = markets
+    exchange.markets_by_id = ids
+    exchange.options['adjustForTimeDifference'] = False # Time sync da yapma
+    return exchange
 
 def get_exchange(use_spot=False, ignore_sticky=False):
     import random
@@ -72,11 +112,9 @@ def get_exchange(use_spot=False, ignore_sticky=False):
     }
     
     # Proxy Seçimi
-    # Eğer Sticky aktifse ve ignore edilmemişse onu kullan
     if PREFERRED_PROXY is not None and not ignore_sticky:
         proxy = PREFERRED_PROXY
     else:
-        # Rastgele (Sticky'i geçersiz kıl)
         proxy = random.choice(PROXIES)
     
     if proxy:
@@ -85,7 +123,12 @@ def get_exchange(use_spot=False, ignore_sticky=False):
             'https': proxy
         }
     
-    return ccxt.binance(config)
+    ex = ccxt.binance(config)
+    
+    if FORCE_MANUAL_MARKETS:
+        ex = inject_manual_markets(ex)
+        
+    return ex
 
 def fetch_binance_ohlcv(symbol: str = 'BTC/USDT', timeframe: str = '1h', limit: int = 500) -> tuple[Optional[pd.DataFrame], str]:
     # Dönüş formatı: (DataFrame, HataMesajı)
@@ -95,17 +138,19 @@ def fetch_binance_ohlcv(symbol: str = 'BTC/USDT', timeframe: str = '1h', limit: 
     
     for i in range(max_retries):
         try:
-            # 1. Denemeden sonra Sticky Proxy'i yoksay (Belki o bozuktur)
             ignore_sticky = True if i > 0 else False
-            
-            # 2. Denemeden itibaren Spot dene (Veya Force Spot açıksa hep spot)
             use_spot = True if i >= 1 else False
             
             exchange = get_exchange(use_spot=use_spot, ignore_sticky=ignore_sticky)
             
-            # User-Agent
-            exchange.userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+            # User-Agent ve Referer (Bypass attempt)
+            exchange.userAgent = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+            exchange.headers = {
+                'Referer': 'https://www.binance.com/',
+                'Origin': 'https://www.binance.com'
+            }
             
+            # load_markets() çağırmadan direkt fetch
             ohlcv = exchange.fetch_ohlcv(symbol, timeframe, limit=limit)
             if not ohlcv: 
                 last_error = "Boş Veri"
