@@ -150,27 +150,33 @@ if st.button("🔍 TARAMAYI BAŞLAT", use_container_width=True):
         errors.append(f"❌ Tarama Hatası: {str(e)}")
         coins = []
     
-    results = []
-    
-    for i, item in enumerate(coins):
+    import concurrent.futures
+    import time
+
+    # Paralel Tarama Fonksiyonu
+    def analyze_coin(item):
         symbol = item['symbol']
         clean_sym = clean_symbol(symbol)
-        
         try:
+            # Her thread kendi proxy bağlantısını kullanır
             df_1h = fetch_binance_ohlcv(symbol, timeframe='1h', limit=500)
+            if df_1h is None: return None
+            
             df_4h = fetch_binance_ohlcv(symbol, timeframe='4h', limit=100)
             df_15m = fetch_binance_ohlcv(symbol, timeframe='15m', limit=100)
             df_1d = fetch_binance_ohlcv(symbol, timeframe='1d', limit=30)
             
-            if df_1h is None:
-                continue # Bu coin için veri çekilemedi
-                
             ai_data = AIAnaliz.hesapla_olasilik(df_1h, df_1d, symbol, df_4h, df_15m)
             
+            # Sadece filtrelere uyanları döndür (Performans için)
             potansiyel = ai_data['Setup'].get('Potansiyel', 0)
             ai_skor = ai_data['AI_Skor']
             
-            results.append({
+            # Ön Eleme
+            if potansiyel < min_profit or ai_skor < min_ai:
+                return None
+
+            return {
                 "Sembol": clean_sym,
                 "Yön": ai_data['Tahmin'],
                 "Fiyat": ai_data['Setup'].get('Giriş', 0),
@@ -188,17 +194,41 @@ if st.button("🔍 TARAMAYI BAŞLAT", use_container_width=True):
                 "Profit_Factor": ai_data.get('Profit_Factor', 0),
                 "MTF_Uyum": ai_data.get('MTF_Uyum', False),
                 "MTF_Detay": ai_data.get('MTF_Detay', '-')
-            })
+            }
         except:
-            pass
+            return None
+
+    results = []
+    
+    # Progress Bar ve Durum Metni
+    progress_bar = st.progress(0)
+    status_text = st.empty()
+    
+    # Paralel İşlemi Başlat (Max 5 Thread - Proxy'i yormamak için)
+    with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+        futures = {executor.submit(analyze_coin, coin): coin for coin in coins}
+        
+        completed = 0
+        total = len(coins)
+        
+        for future in concurrent.futures.as_completed(futures):
+            coin = futures[future]
+            try:
+                data = future.result()
+                if data:
+                    results.append(data)
+            except Exception as exc:
+                pass
             
-        progress.progress((i + 1) / len(coins))
+            completed += 1
+            progress_bar.progress(completed / total)
+            status_text.markdown(f"⏳ Taranıyor: **{coin['symbol']}** ({completed}/{total})")
+            
+    status_text.empty()
+    progress_bar.empty()
     
-    status.empty()
-    progress.empty()
-    
-    # Filtreleme
-    elite = [r for r in results if r['Potansiyel'] >= min_profit and r['AI_Skor'] >= min_ai]
+    # Filtreleme (Zaten fonksiyon içinde yapıldı ama tekrar kontrol)
+    elite = [r for r in results]
     
     # MTF uyumlu olanları öne, sonra potansiyele göre sırala
     elite.sort(key=lambda x: (-int(x['MTF_Uyum']), -x['Potansiyel']))
