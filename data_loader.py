@@ -20,18 +20,27 @@ MAJOR_COINS = {
 
 # Binance Global'e ABD'den (Streamlit Cloud) erişim için public proxy listesi
 PROXIES = [
-    '', # Direkt
+    '', 
     'http://8.219.97.248:80',
     'http://20.206.106.192:80', 
     'http://162.223.94.164:80',
     'http://51.159.115.233:3128',
+    'http://159.203.87.130:3128',
+    'http://134.209.29.120:8080',
+    'http://167.71.5.176:8080',
+    'http://165.22.216.59:8080',
+    'http://138.197.148.215:80'
 ]
 
-# Global değişken: Çalışan proxy'yi hafızada tutmak için
+# Global değişkenler
 PREFERRED_PROXY = None
+FORCE_SPOT_MODE = False
 
 def get_exchange(use_spot=False):
     import random
+    
+    # Eğer Global Zorlama varsa veya parametre olarak geldiyse Spot kullan
+    use_spot = use_spot or FORCE_SPOT_MODE
     
     # options: defaultType: future vs spot
     default_type = 'spot' if use_spot else 'future'
@@ -39,7 +48,7 @@ def get_exchange(use_spot=False):
     config = {
         'enableRateLimit': True,
         'options': {'defaultType': default_type},
-        'timeout': 20000, # Timeout tavan yaptı
+        'timeout': 20000, 
         'verify': False 
     }
     

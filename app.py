@@ -142,26 +142,48 @@ if st.button("🔍 TARAMAYI BAŞLAT", use_container_width=True):
     connection_success = False
     last_error = ""
     
-    with st.spinner("🌍 Binance sunucularına bağlanılıyor (Akıllı Proxy Seçimi)..."):
+    import data_loader # Modülü import et
+    from data_loader import get_exchange, PROXIES
+    connection_success = False
+    last_error = ""
+    is_spot_connected = False
+    
+    with st.spinner("🌍 Bağlantı kuruluyor (Futures & Spot deneniyor)..."):
         mask_cols = st.columns([1, 10]) 
-        # Manuel proxy rotasyonu yapıp çalışanı bulacağız
+        
+        # 1. Aşama: Futures API Dene
         for proxy in PROXIES:
             try:
-                # Geçici olarak manuell proxy ile dene
                 data_loader.PREFERRED_PROXY = proxy if proxy else None
-                ex = get_exchange()
-                ex.fetch_time() # Ping
+                ex = get_exchange(use_spot=False)
+                ex.fetch_time() # Ping Futures
                 connection_success = True
-                status.success(f"🟢 Bağlantı Başarılı ({'Direkt' if not proxy else 'Proxy'})")
-                break # Döngüden çık, PREFERRED_PROXY artık set edildi
+                status.success(f"🟢 Futures Bağlantısı Başarılı ({'Direkt' if not proxy else 'Proxy'})")
+                break 
             except Exception as e:
                 last_error = str(e)
                 continue
+        
+        # 2. Aşama: Eğer Futures başarısızsa Spot Dene
+        if not connection_success:
+            st.warning("⚠️ Futures API erişilemedi, Spot API deneniyor...")
+            for proxy in PROXIES:
+                try:
+                    data_loader.PREFERRED_PROXY = proxy if proxy else None
+                    ex = get_exchange(use_spot=True)
+                    ex.fetch_time() # Ping Spot
+                    connection_success = True
+                    is_spot_connected = True
+                    data_loader.FORCE_SPOT_MODE = True # Tüm sistemi Spot'a zorla
+                    status.warning(f"🟡 Spot Bağlantısı Başarılı (Kısıtlı Veri)")
+                    break
+                except Exception as e:
+                    last_error = str(e)
+                    continue
     
     if not connection_success:
-        errors.append(f"❌ Kritik Hata: Hiçbir bağlantı yöntemi çalışmadı. Son Hata: {last_error}")
+        errors.append(f"❌ Kritik Hata: Hiçbir bağlantı yöntemi (Spot dahil) çalışmadı. Son Hata: {last_error}")
         status.error("🔴 Bağlantı Kurulamadı")
-        # Eğer hepsi patladıysa Spot Fallback için None 'a çek (Belki rastgele dener)
         data_loader.PREFERRED_PROXY = None
 
     try:
