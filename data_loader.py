@@ -19,6 +19,7 @@ MAJOR_COINS = {
 }
 
 # Binance Global'e ABD'den (Streamlit Cloud) erişim için public proxy listesi
+# Not: Bu liste zamanla eskiyebilir. Gerçek bir projede rotasyon servisi kullanılmalı.
 PROXIES = [
     '', 
     'http://8.219.97.248:80',
@@ -29,8 +30,26 @@ PROXIES = [
     'http://134.209.29.120:8080',
     'http://167.71.5.176:8080',
     'http://165.22.216.59:8080',
-    'http://138.197.148.215:80'
+    'http://138.197.148.215:80',
+    'http://20.210.113.32:80',
+    'http://51.158.154.173:3128',
+    'http://51.158.147.227:3128',
+    'http://188.166.216.208:80',
+    'http://64.225.4.29:80',
+    'http://159.89.49.172:80',
+    'http://165.227.215.71:80',
+    'http://206.189.135.195:80',
+    'http://142.93.57.37:80',
+    'http://167.99.197.106:80',
+    'http://157.230.252.176:80',
+    'http://104.248.83.212:80',
+    'http://134.209.106.220:80',
+    'http://68.183.134.58:80',
+    'http://167.71.168.194:80'
 ]
+
+import random
+random.shuffle(PROXIES) # Her yüklemede listeyi karıştır
 
 # Global değişkenler
 PREFERRED_PROXY = None

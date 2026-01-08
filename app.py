@@ -151,31 +151,33 @@ if st.button("🔍 TARAMAYI BAŞLAT", use_container_width=True):
     with st.spinner("🌍 Bağlantı kuruluyor (Futures & Spot deneniyor)..."):
         mask_cols = st.columns([1, 10]) 
         
-        # 1. Aşama: Futures API Dene
+        # 1. Aşama: Futures API Dene (Veri Çekme Testi)
         for proxy in PROXIES:
             try:
                 data_loader.PREFERRED_PROXY = proxy if proxy else None
                 ex = get_exchange(use_spot=False)
-                ex.fetch_time() # Ping Futures
+                # Sadece Ping yetmez, veri çekmeyi dene!
+                ex.fetch_ohlcv('BTC/USDT', timeframe='1h', limit=1) 
                 connection_success = True
-                status.success(f"🟢 Futures Bağlantısı Başarılı ({'Direkt' if not proxy else 'Proxy'})")
+                status.success(f"🟢 Futures Veri Erişimi Başarılı ({'Direkt' if not proxy else 'Proxy'})")
                 break 
             except Exception as e:
                 last_error = str(e)
                 continue
         
-        # 2. Aşama: Eğer Futures başarısızsa Spot Dene
+        # 2. Aşama: Eğer Futures başarısızsa Spot Dene (Veri Çekme Testi)
         if not connection_success:
             st.warning("⚠️ Futures API erişilemedi, Spot API deneniyor...")
             for proxy in PROXIES:
                 try:
                     data_loader.PREFERRED_PROXY = proxy if proxy else None
                     ex = get_exchange(use_spot=True)
-                    ex.fetch_time() # Ping Spot
+                    # Sadece Ping yetmez, veri çekmeyi dene!
+                    ex.fetch_ohlcv('BTC/USDT', timeframe='1h', limit=1)
                     connection_success = True
                     is_spot_connected = True
                     data_loader.FORCE_SPOT_MODE = True # Tüm sistemi Spot'a zorla
-                    status.warning(f"🟡 Spot Bağlantısı Başarılı (Kısıtlı Veri)")
+                    status.warning(f"🟡 Spot Veri Erişimi Başarılı (Kısıtlı Veri)")
                     break
                 except Exception as e:
                     last_error = str(e)
