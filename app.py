@@ -7,24 +7,24 @@ st.set_page_config(page_title="TERMINAL SCANNER", page_icon="💻", layout="wide
 
 st.markdown("""
 <style>
-    .main { background-color: #0a0a0a; }
-    .terminal-card { background: #141414; border: 1px solid #2a2a2a; border-radius: 8px; padding: 12px; margin: 5px 0; }
-    .card-low-conf { border-color: #ffa500 !important; }
-    .card-strong { border-color: #00ff00 !important; border-width: 2px; }
-    .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
-    .coin-name { color: #fff; font-size: 16px; font-weight: 600; }
-    .direction-long { background: #00c853; color: #000; padding: 2px 8px; border-radius: 4px; font-weight: bold; font-size: 10px; }
-    .direction-short { background: #ff1744; color: #fff; padding: 2px 8px; border-radius: 4px; font-weight: bold; font-size: 10px; }
-    .price-row { display: flex; justify-content: space-between; background: #1a1a1a; padding: 6px; border-radius: 4px; margin: 6px 0; font-size: 11px; }
-    .price-entry { color: #4fc3f7; }
-    .price-target { color: #69f0ae; }
-    .price-stop { color: #ff5252; }
-    .stats-row { display: flex; justify-content: space-between; font-size: 10px; color: #777; margin: 4px 0; }
-    .backtest-row { background: #1a1a1a; padding: 6px; border-radius: 4px; margin-top: 6px; font-size: 10px; }
-    .profit-badge { background: #00c853; color: #000; padding: 2px 8px; border-radius: 4px; font-weight: bold; font-size: 11px; }
-    .strong-badge { background: #00ff00; color: #000; padding: 2px 6px; border-radius: 3px; font-size: 9px; margin-left: 5px; }
-    .low-badge { background: #ff9800; color: #000; padding: 2px 6px; border-radius: 3px; font-size: 9px; margin-left: 5px; }
-    .waiting-msg { text-align: center; padding: 50px; color: #444; font-size: 20px; }
+    /* Streamlit Cloud için arka planı zorla */
+    .stApp {
+        background-color: #0a0a0a !important;
+    }
+    .main { 
+        background-color: #0a0a0a; 
+    }
+    div[data-testid="stExpander"] {
+        background-color: #141414;
+        border: 1px solid #2a2a2a;
+    }
+    .terminal-card { 
+        background: #141414; 
+        border: 1px solid #2a2a2a; 
+        border-radius: 8px; 
+        padding: 12px; 
+        margin: 5px 0; 
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -103,9 +103,14 @@ if st.button("🔍 TARAMAYI BAŞLAT", use_container_width=True):
     progress = st.progress(0)
     
     mode = mode_map[scan_mode]
-    status.info(f"🔍 {scan_mode} modunda taranıyor...")
-    
-    coins = fetch_coins_by_mode(mode, limit=30, verbose=False)
+    errors = []
+    try:
+        coins = fetch_coins_by_mode(mode, limit=30, verbose=False)
+        if not coins:
+            errors.append("API'den veri alınamadı. (Binance IP'nizi engellemiş olabilir)")
+    except Exception as e:
+        errors.append(f"Tarama hatası: {str(e)}")
+        coins = []
     
     results = []
     
@@ -119,6 +124,9 @@ if st.button("🔍 TARAMAYI BAŞLAT", use_container_width=True):
             df_15m = fetch_binance_ohlcv(symbol, timeframe='15m', limit=100)
             df_1d = fetch_binance_ohlcv(symbol, timeframe='1d', limit=30)
             
+            if df_1h is None:
+                continue # Bu coin için veri çekilemedi
+                
             ai_data = AIAnaliz.hesapla_olasilik(df_1h, df_1d, symbol, df_4h, df_15m)
             
             potansiyel = ai_data['Setup'].get('Potansiyel', 0)
@@ -157,6 +165,10 @@ if st.button("🔍 TARAMAYI BAŞLAT", use_container_width=True):
     # MTF uyumlu olanları öne, sonra potansiyele göre sırala
     elite.sort(key=lambda x: (-int(x['MTF_Uyum']), -x['Potansiyel']))
     
+    if errors:
+        for err in errors:
+            st.warning(err)
+            
     if elite:
         st.success(f"✅ {len(elite)} Fırsat Bulundu ({scan_mode})")
         
@@ -166,10 +178,10 @@ if st.button("🔍 TARAMAYI BAŞLAT", use_container_width=True):
             for j, data in enumerate(batch):
                 with cols[j]:
                     st.markdown(render_card(data), unsafe_allow_html=True)
-    else:
+    elif not errors: # Hata yok ama fırsat da yok
         st.markdown(f"""
         <div class="waiting-msg">
-            📡 {scan_mode} modunda fırsat yok<br>
-            <small>Filtreleri gevşetmeyi dene</small>
+            📡 {scan_mode} modunda şu an uygun fırsat yok<br>
+            <small>Filtreleri (Kar veya AI) gevşetmeyi dene</small>
         </div>
         """, unsafe_allow_html=True)
