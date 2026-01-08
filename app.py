@@ -142,57 +142,30 @@ if st.button("🔍 TARAMAYI BAŞLAT", use_container_width=True):
     connection_success = False
     last_error = ""
     
-    import data_loader # Modülü import et
-    from data_loader import get_exchange, PROXIES
+    import data_loader 
+    from data_loader import get_exchange
     connection_success = False
     last_error = ""
-    is_spot_connected = False
     
-    with st.spinner("🌍 Bağlantı kuruluyor (Futures & Spot deneniyor)..."):
-        mask_cols = st.columns([1, 10]) 
-        
-        # 1. Aşama: Futures API Dene (Veri Çekme Testi)
-        for proxy in PROXIES:
-            try:
-                data_loader.PREFERRED_PROXY = proxy if proxy else None
-                ex = get_exchange(use_spot=False)
-                # Sadece Ping yetmez, veri çekmeyi dene!
-                ex.fetch_ohlcv('BTC/USDT', timeframe='1h', limit=1) 
-                connection_success = True
-                status.success(f"🟢 Futures Veri Erişimi Başarılı ({'Direkt' if not proxy else 'Proxy'})")
-                break 
-            except Exception as e:
-                last_error = str(e)
-                continue
-        
-        # 2. Aşama: Eğer Futures başarısızsa Spot Dene (Veri Çekme Testi)
-        if not connection_success:
-            st.warning("⚠️ Futures API erişilemedi, Spot API deneniyor...")
-            for proxy in PROXIES:
-                try:
-                    data_loader.PREFERRED_PROXY = proxy if proxy else None
-                    ex = get_exchange(use_spot=True)
-                    # Sadece Ping yetmez, veri çekmeyi dene!
-                    ex.fetch_ohlcv('BTC/USDT', timeframe='1h', limit=1)
-                    connection_success = True
-                    is_spot_connected = True
-                    data_loader.FORCE_SPOT_MODE = True # Tüm sistemi Spot'a zorla
-                    status.warning(f"🟡 Spot Veri Erişimi Başarılı (Kısıtlı Veri)")
-                    break
-                except Exception as e:
-                    last_error = str(e)
-                    continue
+    with st.spinner("🌍 Binance Sunucularına Bağlanılıyor..."):
+        try:
+            ex = get_exchange()
+            ex.fetch_time() # Basit Ping
+            connection_success = True
+            status.success("🟢 Bağlantı Başarılı")
+        except Exception as e:
+            last_error = str(e)
+            connection_success = False
     
     if not connection_success:
-        errors.append(f"❌ Kritik Hata: Hiçbir bağlantı yöntemi (Spot dahil) çalışmadı. Son Hata: {last_error}")
-        status.error("🔴 Bağlantı Kurulamadı")
-        data_loader.PREFERRED_PROXY = None
+        errors.append(f"❌ Bağlantı Hatası: {last_error}")
+        status.error("🔴 API Erişim Hatası")
 
     try:
         if connection_success:
             coins = fetch_coins_by_mode(mode, limit=30, verbose=False)
             if not coins:
-                errors.append("⚠️ Coin listesi alınamadı.")
+                errors.append("⚠️ Coin listesi boş.")
         else:
             coins = []
     except Exception as e:

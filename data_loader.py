@@ -20,159 +20,46 @@ MAJOR_COINS = {
 
 # Binance Global'e ABD'den (Streamlit Cloud) erişim için public proxy listesi
 # Not: Bu liste zamanla eskiyebilir. Gerçek bir projede rotasyon servisi kullanılmalı.
-PROXIES = [
-    '', 
-    'http://8.219.97.248:80',
-    'http://20.206.106.192:80', 
-    'http://162.223.94.164:80',
-    'http://51.159.115.233:3128',
-    'http://159.203.87.130:3128',
-    'http://134.209.29.120:8080',
-    'http://167.71.5.176:8080',
-    'http://165.22.216.59:8080',
-    'http://138.197.148.215:80',
-    'http://20.210.113.32:80',
-    'http://51.158.154.173:3128',
-    'http://51.158.147.227:3128',
-    'http://188.166.216.208:80',
-    'http://64.225.4.29:80',
-    'http://159.89.49.172:80',
-    'http://165.227.215.71:80',
-    'http://206.189.135.195:80',
-    'http://142.93.57.37:80',
-    'http://167.99.197.106:80',
-    'http://157.230.252.176:80',
-    'http://104.248.83.212:80',
-    'http://134.209.106.220:80',
-    'http://68.183.134.58:80',
-    'http://167.71.168.194:80'
-]
-
-import random
-random.shuffle(PROXIES) # Her yüklemede listeyi karıştır
+# Binance Global'e ABD'den (Streamlit Cloud) erişim için public proxy listesi
+# Masaüstü modunda boş bırakıyoruz (Direkt bağlantı)
+PROXIES = ['']
 
 # Global değişkenler
 PREFERRED_PROXY = None
 FORCE_SPOT_MODE = False
-FORCE_MANUAL_MARKETS = True # exchangeInfo datasını çekmeyip elle tanımlayacağız
+FORCE_MANUAL_MARKETS = False 
 
 def inject_manual_markets(exchange):
-    """
-    Binance'in exchangeInfo endpoint'i engellendiği için
-    en popüler coinleri elle tanımlıyoruz. Bu sayede load_markets() çağrısından kurtuluyoruz.
-    """
-    markets = {}
-    ids = {}
-    
-    # En popüler 30 Coin
-    symbols = [
-        'BTC/USDT', 'ETH/USDT', 'SOL/USDT', 'BNB/USDT', 'XRP/USDT', 'ADA/USDT', 
-        'DOGE/USDT', 'AVAX/USDT', 'TRX/USDT', 'DOT/USDT', 'MATIC/USDT', 'LINK/USDT', 
-        'UNI/USDT', 'LTC/USDT', 'BCH/USDT', 'ATOM/USDT', 'XLM/USDT', 'ETC/USDT', 
-        'FIL/USDT', 'XMR/USDT', 'NEAR/USDT', 'APT/USDT', 'QNT/USDT', 'LDO/USDT', 
-        'HBAR/USDT', 'ICP/USDT', 'GRT/USDT', 'SAND/USDT', 'EOS/USDT', 'MANA/USDT'
-    ]
-    
-    for symbol in symbols:
-        base, quote = symbol.split('/')
-        market_id = base + quote # BTCUSDT
-        markets[symbol] = {
-            'id': market_id,
-            'symbol': symbol,
-            'base': base,
-            'quote': quote,
-            'baseId': base,
-            'quoteId': quote,
-            'active': True,
-            'type': 'spot',
-            'spot': True,
-            'future': False,
-            'option': False, 
-            'contract': False,
-            'precision': {'amount': 8, 'price': 8},
-            'limits': {'amount': {'min': 0.00001, 'max': 9000}, 'cost': {'min': 5, 'max': 1000000}},
-            'info': {}
-        }
-        ids[market_id] = markets[symbol]
-        
-    exchange.markets = markets
-    exchange.markets_by_id = ids
-    exchange.options['adjustForTimeDifference'] = False 
+    # Masaüstü modunda devre dışı
     return exchange
 
 def get_exchange(use_spot=False, ignore_sticky=False):
-    import random
-    
-    # Manual Market aktifse ZORUNLU olarak Spot Moduna geç (Tanımlar Spot çünkü)
-    if FORCE_MANUAL_MARKETS:
-        use_spot = True
-    else:
-        use_spot = use_spot or FORCE_SPOT_MODE
-    
+    # Masaüstü Modu: Direkt ve Hızlı Bağlantı
     # options: defaultType: future vs spot
     default_type = 'spot' if use_spot else 'future'
     
     config = {
         'enableRateLimit': True,
         'options': {'defaultType': default_type},
-        'timeout': 20000, 
-        'verify': False 
+        'timeout': 10000
     }
     
-    # Proxy Seçimi
-    if PREFERRED_PROXY is not None and not ignore_sticky:
-        proxy = PREFERRED_PROXY
-    else:
-        proxy = random.choice(PROXIES)
-    
-    if proxy:
-        config['proxies'] = {
-            'http': proxy,
-            'https': proxy
-        }
-    
-    ex = ccxt.binance(config)
-    
-    if FORCE_MANUAL_MARKETS:
-        ex = inject_manual_markets(ex)
-        
-    return ex
+    return ccxt.binance(config)
 
 def fetch_binance_ohlcv(symbol: str = 'BTC/USDT', timeframe: str = '1h', limit: int = 500) -> tuple[Optional[pd.DataFrame], str]:
-    # Dönüş formatı: (DataFrame, HataMesajı)
-    
-    max_retries = 4
-    last_error = ""
-    
-    for i in range(max_retries):
-        try:
-            ignore_sticky = True if i > 0 else False
-            use_spot = True if i >= 1 else False
-            
-            exchange = get_exchange(use_spot=use_spot, ignore_sticky=ignore_sticky)
-            
-            # User-Agent ve Referer (Bypass attempt)
-            exchange.userAgent = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-            exchange.headers = {
-                'Referer': 'https://www.binance.com/',
-                'Origin': 'https://www.binance.com'
-            }
-            
-            # load_markets() çağırmadan direkt fetch
-            ohlcv = exchange.fetch_ohlcv(symbol, timeframe, limit=limit)
-            if not ohlcv: 
-                last_error = "Boş Veri"
-                continue
+    try:
+        exchange = get_exchange(use_spot=False) # Masaüstünde direkt Futures
+        ohlcv = exchange.fetch_ohlcv(symbol, timeframe, limit=limit)
+        
+        if not ohlcv: 
+            return None, "Boş Veri"
 
-            df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
-            df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
-            return df, ""
-            
-        except Exception as e:
-            last_error = str(e)
-            continue
-            
-    return None, last_error
+        df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
+        df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
+        return df, ""
+        
+    except Exception as e:
+        return None, str(e)
 
 def fetch_open_interest(symbol: str) -> Optional[float]:
     try:
