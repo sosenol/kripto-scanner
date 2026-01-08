@@ -7,35 +7,62 @@ st.set_page_config(page_title="TERMINAL SCANNER", page_icon="💻", layout="wide
 
 st.markdown("""
 <style>
-    /* Streamlit Cloud için arka planı zorla */
+    /* Global renk düzeltmeleri */
     .stApp {
-        background-color: #0a0a0a !important;
+        background-color: #0d1117;
+        color: #c9d1d9;
     }
-    .main { 
-        background-color: #0a0a0a; 
+    /* Slider ve Selectbox etiketleri için beyaz renk zorla */
+    label[data-testid="stWidgetLabel"] {
+        color: #ffffff !important;
+        font-weight: bold !important;
     }
-    div[data-testid="stExpander"] {
-        background-color: #141414;
-        border: 1px solid #2a2a2a;
+    /* Expander arka planı */
+    .st-emotion-cache-p5msec {
+        background-color: #161b22 !important;
+        border: 1px solid #30363d !important;
     }
-    .terminal-card { 
-        background: #141414; 
-        border: 1px solid #2a2a2a; 
-        border-radius: 8px; 
-        padding: 12px; 
-        margin: 5px 0; 
+    .terminal-card {
+        background: #161b22;
+        border: 1px solid #30363d;
+        border-radius: 10px;
+        padding: 15px;
+        margin-bottom: 10px;
+        color: #c9d1d9;
+    }
+    .price-row {
+        background: #0d1117;
+        padding: 10px;
+        border-radius: 5px;
+        margin: 10px 0;
+    }
+    .waiting-msg {
+        text-align: center;
+        padding: 50px;
+        color: #8b949e;
+        font-size: 18px;
+    }
+    /* Buton rengi */
+    .stButton > button {
+        background-color: #238636 !important;
+        color: white !important;
+        font-weight: bold;
+        border: none;
+    }
+    .stButton > button:hover {
+        background-color: #2ea043 !important;
     }
 </style>
 """, unsafe_allow_html=True)
 
-st.markdown("<h1 style='color: #fff; text-align: center;'>💻 TERMINAL SCANNER</h1>", unsafe_allow_html=True)
+st.markdown("<h1 style='color: #ffffff; text-align: center;'>💻 TERMINAL SCANNER</h1>", unsafe_allow_html=True)
 
 # === AYARLAR ===
-col1, col2, col3 = st.columns(3)
+col1, col2, col3 = st.columns([2, 1, 1])
 with col1:
-    scan_mode = st.selectbox("🎯 Tarama Modu", ["🛡️ Majör Coinler", "🔥 Yüksek Volatilite", "⚠️ Risk Avcısı"])
+    scan_mode = st.selectbox("🎯 Tarama Modu", ["🛡️ Majör Coinler", "🔥 Yüksek Volatilite", "⚠️ Risk Avcısı"], index=0)
 with col2:
-    min_profit = st.slider("💰 Min. Kar (%)", 0.5, 10.0, 1.5, 0.5)
+    min_profit = st.slider("💰 Min. Kar (%)", 0.5, 10.0, 1.0, 0.5)
 with col3:
     min_ai = st.slider("🧠 Min. AI (%)", 50, 80, 52, 2)
 
@@ -104,12 +131,23 @@ if st.button("🔍 TARAMAYI BAŞLAT", use_container_width=True):
     
     mode = mode_map[scan_mode]
     errors = []
+    
+    # Bağlantı testi
+    try:
+        from data_loader import get_exchange
+        ex = get_exchange()
+        ex.fetch_time() # Basit bir ping testi
+        status.success("🟢 Binance Bağlantısı Başarılı")
+    except Exception as e:
+        errors.append(f"❌ Binance API Bağlantı Hatası: {str(e)}")
+        status.error("🔴 API Bağlantı Sorunu")
+
     try:
         coins = fetch_coins_by_mode(mode, limit=30, verbose=False)
         if not coins:
-            errors.append("API'den veri alınamadı. (Binance IP'nizi engellemiş olabilir)")
+            errors.append("⚠️ Mevcut modda (veya seçilen hacimde) taranacak coin bulunamadı.")
     except Exception as e:
-        errors.append(f"Tarama hatası: {str(e)}")
+        errors.append(f"❌ Tarama Hatası: {str(e)}")
         coins = []
     
     results = []
