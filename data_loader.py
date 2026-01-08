@@ -20,11 +20,16 @@ MAJOR_COINS = {
 
 # Binance Global'e ABD'den (Streamlit Cloud) erişim için public proxy listesi
 PROXIES = [
+    '', # Direkt bağlantı (Bazı sunucularda çalışabilir)
     'http://65.109.219.160:80',
     'http://20.206.106.192:80', 
     'http://162.223.94.164:80',
     'http://8.219.97.248:80',
-    '' # En son direkt bağlantı dene
+    'http://20.210.113.32:80',
+    'http://51.159.115.233:3128',
+    'http://51.158.154.173:3128',
+    'http://51.158.147.227:3128',
+    'http://159.203.87.130:3128'
 ]
 
 def get_exchange():

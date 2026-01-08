@@ -132,20 +132,41 @@ if st.button("🔍 TARAMAYI BAŞLAT", use_container_width=True):
     mode = mode_map[scan_mode]
     errors = []
     
-    # Bağlantı testi
-    try:
-        from data_loader import get_exchange
-        ex = get_exchange()
-        ex.fetch_time() # Basit bir ping testi
-        status.success("🟢 Binance Bağlantısı Başarılı")
-    except Exception as e:
-        errors.append(f"❌ Binance API Bağlantı Hatası: {str(e)}")
-        status.error("🔴 API Bağlantı Sorunu")
+    mode = mode_map[scan_mode]
+    errors = []
+    
+    # Bağlantı testi (Retry Mekanizması ile)
+    from data_loader import get_exchange
+    connection_success = False
+    last_error = ""
+    
+    with st.spinner("🌍 Binance sunucularına bağlanılıyor (Proxy deneniyor)..."):
+        mask_cols = st.columns([1, 10]) # İkon ve yazı hizası için
+        for attempt in range(1, 6): # 5 kere dene
+            try:
+                ex = get_exchange()
+                ex.fetch_time() # Ping testi
+                connection_success = True
+                status.success(f"🟢 Binance Bağlantısı Başarılı (Deneme: {attempt})")
+                break
+            except Exception as e:
+                last_error = str(e)
+                # Hata olsa bile devam et, sonraki proxy'i dene
+                continue
+    
+    if not connection_success:
+        errors.append(f"❌ Binance API Bağlantı Hatası: Hiçbir proxy çalışmadı. Son Hata: {last_error}")
+        status.error("🔴 API Bağlantı Sorunu - Sayfayı Yenileyin")
+        with st.expander("Hata Detayları"):
+            st.write(last_error)
 
     try:
-        coins = fetch_coins_by_mode(mode, limit=30, verbose=False)
-        if not coins:
-            errors.append("⚠️ Mevcut modda (veya seçilen hacimde) taranacak coin bulunamadı.")
+        if connection_success:
+            coins = fetch_coins_by_mode(mode, limit=30, verbose=False)
+            if not coins:
+                errors.append("⚠️ Mevcut modda (veya seçilen hacimde) taranacak coin bulunamadı.")
+        else:
+            coins = []
     except Exception as e:
         errors.append(f"❌ Tarama Hatası: {str(e)}")
         coins = []
