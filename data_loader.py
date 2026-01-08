@@ -20,33 +20,28 @@ MAJOR_COINS = {
 
 # Binance Global'e ABD'den (Streamlit Cloud) erişim için public proxy listesi
 PROXIES = [
-    '', # Direkt bağlantı (Bazı sunucularda çalışabilir)
-    'http://65.109.219.160:80',
+    '', # Direkt
+    'http://8.219.97.248:80',
     'http://20.206.106.192:80', 
     'http://162.223.94.164:80',
-    'http://8.219.97.248:80',
-    'http://20.210.113.32:80',
     'http://51.159.115.233:3128',
-    'http://51.158.154.173:3128',
-    'http://51.158.147.227:3128',
-    'http://159.203.87.130:3128'
 ]
 
-def get_exchange():
-    # Streamlit Cloud (ABD) sunucularından Binance Global'e erişmek yasak.
-    # Bu yüzden basit bir proxy rotasyonu deneyeceğiz.
-    
+def get_exchange(use_spot=False):
     import random
     
-    # options: defaultType: future
+    # options: defaultType: future vs spot
+    default_type = 'spot' if use_spot else 'future'
+    
     config = {
         'enableRateLimit': True,
-        'options': {'defaultType': 'future'},
-        'timeout': 10000
+        'options': {'defaultType': default_type},
+        'timeout': 15000, # Timeout uzatıldı
+        # SSL hatası almamak için (Güvenli değil ama demo için gerekli)
+        'verify': False 
     }
     
-    # Rastgele bir proxy seç (yükü dağıtmak için)
-    # Not: Gerçek bir üretim ortamında paralı/özel proxy kullanılmalı.
+    # Rastgele bir proxy seç
     proxy = random.choice(PROXIES)
     
     if proxy:
@@ -54,27 +49,30 @@ def get_exchange():
             'http': proxy,
             'https': proxy
         }
-        print(f"🔗 Proxy ile bağlanılıyor: {proxy}")
     
     return ccxt.binance(config)
 
 def fetch_binance_ohlcv(symbol: str = 'BTC/USDT', timeframe: str = '1h', limit: int = 500) -> Optional[pd.DataFrame]:
     # Eğer ilk deneme başarısız olursa, farklı bir proxy ile tekrar dene (Basit Retry Mekanizması)
-    max_retries = 3
-    for _ in range(max_retries):
+    max_retries = 4
+    for i in range(max_retries):
         try:
-            exchange = get_exchange()
-            # Bot korumasını aşmak için User-Agent
-            exchange.userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+            # Son denemede Spot API dene (Futures engelliyse)
+            use_spot = True if i == max_retries - 1 else False
+            
+            exchange = get_exchange(use_spot=use_spot)
+            
+            if use_spot:
+                print(f"⚠️ Futures erişilemedi, Spot deneniyor: {symbol}")
             
             ohlcv = exchange.fetch_ohlcv(symbol, timeframe, limit=limit)
             if not ohlcv: return None
+            
             df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
             df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
             return df
         except Exception as e:
-            print(f"⚠️ Veri çekme hatası (Retry): {e}")
-            continue # Sonraki döngüde farklı proxy ile dene
+            continue
             
     return None
 
