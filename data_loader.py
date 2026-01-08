@@ -36,10 +36,10 @@ PROXIES = [
 PREFERRED_PROXY = None
 FORCE_SPOT_MODE = False
 
-def get_exchange(use_spot=False):
+def get_exchange(use_spot=False, ignore_sticky=False):
     import random
     
-    # Eğer Global Zorlama varsa veya parametre olarak geldiyse Spot kullan
+    # Global Zorlama veya Parametre
     use_spot = use_spot or FORCE_SPOT_MODE
     
     # options: defaultType: future vs spot
@@ -52,10 +52,12 @@ def get_exchange(use_spot=False):
         'verify': False 
     }
     
-    # Eğer daha önce çalışan bir proxy bulduysak onu kullan
-    if PREFERRED_PROXY is not None:
+    # Proxy Seçimi
+    # Eğer Sticky aktifse ve ignore edilmemişse onu kullan
+    if PREFERRED_PROXY is not None and not ignore_sticky:
         proxy = PREFERRED_PROXY
     else:
+        # Rastgele (Sticky'i geçersiz kıl)
         proxy = random.choice(PROXIES)
     
     if proxy:
@@ -67,24 +69,27 @@ def get_exchange(use_spot=False):
     return ccxt.binance(config)
 
 def fetch_binance_ohlcv(symbol: str = 'BTC/USDT', timeframe: str = '1h', limit: int = 500) -> tuple[Optional[pd.DataFrame], str]:
-    # Dönüş formatı değişti: (DataFrame, HataMesajı)
+    # Dönüş formatı: (DataFrame, HataMesajı)
     
     max_retries = 4
     last_error = ""
     
     for i in range(max_retries):
         try:
-            # 2. denemeden itibaren Spot API'yi de dene (Futures çok nazlı)
+            # 1. Denemeden sonra Sticky Proxy'i yoksay (Belki o bozuktur)
+            ignore_sticky = True if i > 0 else False
+            
+            # 2. Denemeden itibaren Spot dene (Veya Force Spot açıksa hep spot)
             use_spot = True if i >= 1 else False
             
-            exchange = get_exchange(use_spot=use_spot)
+            exchange = get_exchange(use_spot=use_spot, ignore_sticky=ignore_sticky)
             
-            # Bot korumasını aşmak için User-Agent
+            # User-Agent
             exchange.userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
             
             ohlcv = exchange.fetch_ohlcv(symbol, timeframe, limit=limit)
             if not ohlcv: 
-                last_error = "Boş Veri Döndü"
+                last_error = "Boş Veri"
                 continue
 
             df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
@@ -93,7 +98,6 @@ def fetch_binance_ohlcv(symbol: str = 'BTC/USDT', timeframe: str = '1h', limit: 
             
         except Exception as e:
             last_error = str(e)
-            # Eğer tercih edilen proxy hata verdiyse, belki de ölmüştür? (Şimdilik sıfırlamıyoruz)
             continue
             
     return None, last_error
